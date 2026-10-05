@@ -1,299 +1,304 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * include/linux/sec_debug.h
- *
- * COPYRIGHT(C) 2006-2018 Samsung Electronics Co., Ltd. All Right Reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+* Samsung debugging features for Samsung's SoC's.
+*
+* Copyright (c) 2019 Samsung Electronics Co., Ltd.
+*      http://www.samsung.com
+*/
 
 #ifndef SEC_DEBUG_H
 #define SEC_DEBUG_H
 
-#include <linux/ftrace.h>
-#include <linux/of_address.h>
-#include <linux/reboot.h>
+#include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/semaphore.h>
+#include <linux/types.h>
+#include <linux/sec_debug_types.h>
+/*
+ * Don't include additional headers. They can cause ABI violation problem
+ * because this file is included many built-in drivers.
+ */
 
-#include <asm/sec_debug.h>
-#include <asm/cacheflush.h>
-#include <asm/io.h>
+struct task_struct;
+struct irq_desc;
+struct pt_regs;
+struct freq_log;
 
-#define __SEC_DEBUG_SCHED_LOG_INDIRECT
-#include <linux/sec_debug_sched_log.h>
-#undef __SEC_DEBUG_SCHED_LOG_INDIRECT
-
-#define IRQ_ENTRY	0x4945
-#define IRQ_EXIT	0x4958
-
-#define SOFTIRQ_ENTRY	0x5345
-#define SOFTIRQ_EXIT	0x5358
-
-#define SCM_ENTRY	0x5555
-#define SCM_EXIT	0x6666
-
-#define SEC_DEBUG_MODEM_SEPARATE_EN  0xEAEAEAEA
-#define SEC_DEBUG_MODEM_SEPARATE_DIS 0xDEADDEAD
-
-#define RESET_EXTRA_INFO_SIZE	1024
-
-enum sec_debug_upload_cause_t {
-	UPLOAD_CAUSE_INIT = 0xCAFEBABE,
-	UPLOAD_CAUSE_KERNEL_PANIC = 0x000000C8,
-	UPLOAD_CAUSE_POWER_LONG_PRESS = 0x00000085,
-	UPLOAD_CAUSE_FORCED_UPLOAD = 0x00000022,
-	UPLOAD_CAUSE_USER_FORCED_UPLOAD = 0x00009890,
-	UPLOAD_CAUSE_CP_ERROR_FATAL = 0x000000CC,
-	UPLOAD_CAUSE_MDM_ERROR_FATAL = 0x000000EE,
-	UPLOAD_CAUSE_USER_FAULT = 0x0000002F,
-	UPLOAD_CAUSE_HSIC_DISCONNECTED = 0x000000DD,
-	UPLOAD_CAUSE_MODEM_RST_ERR = 0x000000FC,
-        UPLOAD_CAUSE_ADSP_ERROR_FATAL = 0x000000F1,
-        UPLOAD_CAUSE_SLPI_ERROR_FATAL = 0x000000F2,
-        UPLOAD_CAUSE_SPSS_ERROR_FATAL = 0x000000F3,
-        UPLOAD_CAUSE_NPU_ERROR_FATAL = 0x000000F4,
-        UPLOAD_CAUSE_CDSP_ERROR_FATAL = 0x000000F5,
-	UPLOAD_CAUSE_RIVA_RST_ERR = 0x000000FB,
-	UPLOAD_CAUSE_LPASS_RST_ERR = 0x000000FA,
-	UPLOAD_CAUSE_DSPS_RST_ERR = 0x000000FD,
-	UPLOAD_CAUSE_PERIPHERAL_ERR = 0x000000FF,
-	UPLOAD_CAUSE_NON_SECURE_WDOG_BARK = 0x00000DBA,
-	UPLOAD_CAUSE_NON_SECURE_WDOG_BITE = 0x00000DBE,
-	UPLOAD_CAUSE_POWER_THERMAL_RESET = 0x00000075,
-	UPLOAD_CAUSE_SECURE_WDOG_BITE = 0x00005DBE,
-	UPLOAD_CAUSE_BUS_HANG = 0x000000B5,
-#if defined(CONFIG_SEC_QUEST)
-	UPLOAD_CAUSE_QUEST_CRYPTO = 0x00000ACF,
-	UPLOAD_CAUSE_QUEST_ICACHE = 0x00000ACA,
-	UPLOAD_CAUSE_QUEST_CACHECOHERENCY = 0x00000ACC,
-	UPLOAD_CAUSE_QUEST_SUSPEND = 0x00000A3E,
-	UPLOAD_CAUSE_QUEST_VDDMIN = 0x00000ADD,
-	UPLOAD_CAUSE_QUEST_QMESADDR = 0x00000A29,
-	UPLOAD_CAUSE_QUEST_QMESACACHE = 0x00000AED,
-	UPLOAD_CAUSE_QUEST_PMIC = 0x00000AB8,
-	UPLOAD_CAUSE_QUEST_UFS = 0x00000AF5,
-	UPLOAD_CAUSE_QUEST_SDCARD = 0x00000A7C,
-	UPLOAD_CAUSE_QUEST_SENSOR = 0x00000A9C,
-	UPLOAD_CAUSE_QUEST_SENSORPROBE = 0x00000A9F,
-	UPLOAD_CAUSE_QUEST_GFX = 0x00000A5F,	
-	UPLOAD_CAUSE_QUEST_QDAF_FAIL = 0x00000A9D,
-	UPLOAD_CAUSE_QUEST_FAIL = 0x00000A65,
-	UPLOAD_CAUSE_QUEST_DDR_TEST_MAIN = 0x00000A35,
-	UPLOAD_CAUSE_QUEST_DDR_TEST_CAL = 0x00000A37,
-	UPLOAD_CAUSE_QUEST_DDR_TEST_SMD = 0x00000A3F,
-#endif
-};
-
-enum sec_restart_reason_t {
-	RESTART_REASON_NORMAL = 0x0,
-	RESTART_REASON_BOOTLOADER = 0x77665500,
-	RESTART_REASON_REBOOT = 0x77665501,
-	RESTART_REASON_RECOVERY = 0x77665502,
-	RESTART_REASON_RTC = 0x77665503,
-	RESTART_REASON_DMVERITY_CORRUPTED = 0x77665508,
-	RESTART_REASON_DMVERITY_ENFORCE = 0x77665509,
-	RESTART_REASON_KEYS_CLEAR = 0x7766550a,
-	RESTART_REASON_SEC_DEBUG_MODE = 0x776655ee,
-	RESTART_REASON_END = 0xffffffff,
-};
-
-enum sec_debug_strncmp_func {
-	SEC_STRNCMP = 0,
-	SEC_STRNSTR,
-	SEC_STRNCASECMP,
-};
-
-#define UPLOAD_MSG_USER_FAULT			"User Fault"
-#define UPLOAD_MSG_CRASH_KEY			"Crash Key"
-#define UPLOAD_MSG_USER_CRASH_KEY		"User Crash Key"
-#define UPLOAD_MSG_LONG_KEY_PRESS		"Long Key Press"
-
-struct __upload_cause {
-	const char *msg;
-	enum sec_debug_upload_cause_t type;
-	enum sec_debug_strncmp_func func;
-};
-
+/*
+ * SEC DEBUG LAST KMSG
+ */
 #ifdef CONFIG_SEC_DEBUG
-DECLARE_PER_CPU(struct sec_debug_core_t, sec_debug_core_reg);
-DECLARE_PER_CPU(struct sec_debug_mmu_reg_t, sec_debug_mmu_reg);
-DECLARE_PER_CPU(enum sec_debug_upload_cause_t, sec_debug_upload_cause);
+#define SEC_LKMSG_MAGICKEY 0x0000000a6c6c7546
 
-static inline void sec_debug_save_context(void)
+extern void secdbg_lkmg_store(unsigned char *head_ptr,
+		unsigned char *curr_ptr, size_t buf_size);
+#else
+#define secdbg_lkmg_store(a, b, c)		do {} while(0)
+#endif
+
+/*
+ * SEC DEBUG MODE
+ */
+#if IS_ENABLED(CONFIG_SEC_DEBUG_MODE)
+extern int secdbg_mode_check_sj(void);
+extern int secdbg_mode_enter_upload(void);
+#else
+static inline int secdbg_mode_check_sj(void)
 {
-	unsigned long flags;
-	unsigned int cpu = smp_processor_id();
-
-	local_irq_save(flags);
-	sec_debug_save_mmu_reg(&per_cpu(sec_debug_mmu_reg, cpu));
-	sec_debug_save_core_reg(&per_cpu(sec_debug_core_reg, cpu));
-	pr_emerg("(%s) context saved(CPU:%d)\n", __func__, cpu);
-	local_irq_restore(flags);
-	flush_cache_all();
+	return 0;
 }
-
-void simulate_msm_thermal_bite(void);
-extern void sec_debug_set_upload_cause(enum sec_debug_upload_cause_t type);
-extern void sec_debug_prepare_for_wdog_bark_reset(void);
-extern int sec_debug_init(void);
-extern int sec_debug_dump_stack(void);
-extern void sec_debug_hw_reset(void);
-extern void sec_getlog_supply_fbinfo(void *p_fb, u32 res_x, u32 res_y, u32 bpp,
-		u32 frames);
-extern void sec_getlog_supply_meminfo(u32 size0, u32 addr0, u32 size1,
-		u32 addr1);
-extern void sec_getlog_supply_loggerinfo(void *p_main, void *p_radio,
-		void *p_events, void *p_system);
-extern void sec_getlog_supply_kloginfo(void *klog_buf);
-
-extern void sec_gaf_supply_rqinfo(unsigned short curr_offset,
-				  unsigned short rq_offset);
-extern bool sec_debug_is_enabled(void);
-extern unsigned int sec_debug_level(void);
-extern int sec_debug_is_modem_separate_debug_ssr(void);
-extern int silent_log_panic_handler(void);
-extern void sec_debug_print_model(struct seq_file *m, const char *cpu_name);
-extern void sec_debug_update_restart_reason(const char *cmd,
-		const int in_panic, const int restart_mode);
-extern void sec_debug_set_thermal_upload(void);
-
-extern void sec_debug_upload_cause_str(enum sec_debug_upload_cause_t type, char *str);
-
-#ifdef CONFIG_POWER_RESET_QCOM
-/* from 'msm-poweroff.c' */
-extern void set_dload_mode(int on);
+static inline int secdbg_mode_enter_upload(void)
+{
+	return 0;
+}
 #endif
 
-#ifdef CONFIG_SEC_PERIPHERAL_SECURE_CHK
-extern void sec_peripheral_secure_check_fail(void);
-#else
-static inline void sec_peripheral_secure_check_fail(void) {}
-#endif
-
-#else /* CONFIG_SEC_DEBUG */
-static inline void sec_debug_save_context(void) {}
-static inline void sec_debug_set_upload_cause(
-			enum sec_debug_upload_cause_t type) {}
-static inline void sec_debug_prepare_for_wdog_bark_reset(void) {}
-static inline int sec_debug_init(void) { return 0; }
-static inline int sec_debug_dump_stack(void) { return 0; }
-static inline void sec_peripheral_secure_check_fail(void) {}
-static inline void sec_getlog_supply_fbinfo(void *p_fb, u32 res_x, u32 res_y,
-					    u32 bpp, u32 frames) {}
-
-static inline void sec_getlog_supply_meminfo(u32 size0, u32 addr0, u32 size1,
-					     u32 addr1) {}
-
-#define sec_getlog_supply_loggerinfo(p_main, p_radio, p_events, p_system)
-
-static inline void sec_getlog_supply_kloginfo(void *klog_buf) {}
-
-static inline void sec_gaf_supply_rqinfo(unsigned short curr_offset,
-					unsigned short rq_offset) {}
-
-static inline bool sec_debug_is_enabled(void) { return false; }
-static inline unsigned int sec_debug_level(void) {return 0; }
-static inline  int sec_debug_is_modem_separate_debug_ssr(void)
-			{ return SEC_DEBUG_MODEM_SEPARATE_DIS; }
-static inline void sec_debug_hw_reset(void) {}
-static inline void emerg_pet_watchdog(void) {}
-static inline void sec_debug_set_rr(u32 reason) {}
-static inline u32 sec_debug_get_rr(void) { return 0; }
-static inline void sec_debug_print_model(
-		struct seq_file *m, const char *cpu_name) {}
-static inline void sec_debug_update_restart_reason(const char *cmd,
-		const int in_panic, const int restart_mode) {}
-static inline void sec_debug_set_thermal_upload(void) {}
-#endif /* CONFIG_SEC_DEBUG */
-
-#ifdef CONFIG_SEC_LOG_LAST_KMSG
-extern void sec_set_reset_extra_info(char *last_kmsg_buffer,
-				unsigned last_kmsg_size);
-#else
-static inline void sec_set_reset_extra_info(char *last_kmsg_buffer,
-				unsigned last_kmsg_size) {}
-#endif /* CONFIG_SEC_LOG_LAST_KMSG */
-
-#ifdef CONFIG_SEC_FILE_LEAK_DEBUG
-extern void sec_debug_EMFILE_error_proc(void);
-#else
-static inline void sec_debug_EMFILE_error_proc(void) {}
-#endif /* CONFIG_SEC_FILE_LEAK_DEBUG */
-
-#ifdef CONFIG_SEC_SSR_DEBUG_LEVEL_CHK
-extern int sec_debug_is_enabled_for_ssr(void);
-#else
-static inline int sec_debug_is_enabled_for_ssr(void) { return 0; }
-#endif /* CONFIG_SEC_SSR_DEBUG_LEVEL_CHK */
-
-/* for sec debug level */
-#define KERNEL_SEC_DEBUG_LEVEL_LOW	(0x574F4C44)
-#define KERNEL_SEC_DEBUG_LEVEL_MID	(0x44494D44)
-#define KERNEL_SEC_DEBUG_LEVEL_HIGH	(0x47494844)
-
-#define ANDROID_DEBUG_LEVEL_LOW		0x4f4c
-#define ANDROID_DEBUG_LEVEL_MID		0x494d
-#define ANDROID_DEBUG_LEVEL_HIGH	0x4948
-
-#define ANDROID_CP_DEBUG_ON		0x5500
-#define ANDROID_CP_DEBUG_OFF		0x55ff
-
-extern int ssr_panic_handler_for_sec_dbg(void);
-extern void emerg_pet_watchdog(void);
-extern void show_stack(struct task_struct *tsk, unsigned long *sp);
-#define LOCAL_CONFIG_PRINT_EXTRA_INFO
-
-#ifdef CONFIG_SEC_DEBUG_DOUBLE_FREE
-extern void *kfree_hook(void *p, void *caller);
-#endif
-
-typedef enum {
-	USER_UPLOAD_CAUSE_MIN = 1,
-	USER_UPLOAD_CAUSE_SMPL = USER_UPLOAD_CAUSE_MIN,	/* RESET_REASON_SMPL */
-	USER_UPLOAD_CAUSE_WTSR,			/* RESET_REASON_WTSR */
-	USER_UPLOAD_CAUSE_WATCHDOG,		/* RESET_REASON_WATCHDOG */
-	USER_UPLOAD_CAUSE_PANIC,		/* RESET_REASON_PANIC */
-	USER_UPLOAD_CAUSE_MANUAL_RESET,	/* RESET_REASON_MANUAL_RESET */
-	USER_UPLOAD_CAUSE_POWER_RESET,	/* RESET_REASON_POWER_RESET */
-	USER_UPLOAD_CAUSE_REBOOT,		/* RESET_REASON_REBOOT */
-	USER_UPLOAD_CAUSE_BOOTLOADER_REBOOT,/* RESET_REASON_BOOTLOADER_REBOOT */
-	USER_UPLOAD_CAUSE_POWER_ON,		/* RESET_REASON_POWER_ON */
-	USER_UPLOAD_CAUSE_THERMAL,		/* RESET_REASON_THERMAL_RESET */
-	USER_UPLOAD_CAUSE_UNKNOWN,		/* RESET_REASON_UNKNOWN */
-	USER_UPLOAD_CAUSE_MAX = USER_UPLOAD_CAUSE_UNKNOWN,
-} user_upload_cause_t;
-
-#ifdef CONFIG_TOUCHSCREEN_DUMP_MODE
-struct tsp_dump_callbacks {
-	void (*inform_dump)(void);
+/*
+ * SEC DEBUG - DEBUG SNAPSHOT BASE HOOKING
+ */
+enum {
+	DSS_KEVENT_TASK,
+	DSS_KEVENT_WORK,
+	DSS_KEVENT_IRQ,
+	DSS_KEVENT_FREQ,
+	DSS_KEVENT_IDLE,
+	DSS_KEVENT_THRM,
+	DSS_KEVENT_ACPM,
+	DSS_KEVENT_MFRQ,
 };
+
+#define SD_ESSINFO_KEY_SIZE	(32)
+
+struct ess_info_offset {
+	char key[SD_ESSINFO_KEY_SIZE];
+	unsigned long base;
+	unsigned long last;
+	unsigned int nr;
+	unsigned int size;
+	unsigned int per_core;
+};
+
+/*
+ * SEC DEBUG AUTO COMMENT
+ */
+#if IS_ENABLED(CONFIG_SEC_DEBUG_AUTO_COMMENT)
+extern void secdbg_comm_log_disable(int type);
+extern void secdbg_comm_log_once(int type);
+#define DEFINE_STATIC_PR_AUTO_NAME_ONCE(name, lvl)			\
+	static atomic_t ___pr_auto_counter_##name = ATOMIC_INIT(-1);	\
+	static const char *___pr_auto_level_##name = (lvl)
+
+#define pr_auto_name_once(name)					\
+({								\
+	if (atomic_read(&___pr_auto_counter_##name) <= 0)	\
+		atomic_inc(&___pr_auto_counter_##name);		\
+})
+
+#define pr_auto_name(name, fmt, ...)				\
+({								\
+	if (atomic_read(&___pr_auto_counter_##name) > 0)	\
+		pr_emerg(fmt, ##__VA_ARGS__);			\
+	else							\
+		printk(KERN_AUTO "%s" pr_fmt(fmt),		\
+				___pr_auto_level_##name, ##__VA_ARGS__);	\
+})
+
+#define pr_auto_name_disable(name)				\
+({								\
+	atomic_set(&___pr_auto_counter_##name, 1);		\
+})
+
+#define pr_auto_name_on(__pr_auto_cond, name, fmt, ...)	\
+({								\
+	if (__pr_auto_cond)					\
+		pr_auto_name(name, fmt, ##__VA_ARGS__);	\
+	else							\
+		pr_emerg(fmt, ##__VA_ARGS__);			\
+})
+
+#define pr_auto_on(__pr_auto_cond, lvl, fmt, ...)	\
+({							\
+	if (__pr_auto_cond)				\
+		pr_auto(lvl, fmt, ##__VA_ARGS__);	\
+	else						\
+		pr_emerg(fmt, ##__VA_ARGS__);		\
+})
+#else
+#define DEFINE_STATIC_PR_AUTO_NAME_ONCE(name, lvl)
+#define pr_auto_name_once(name)
+#define pr_auto_name(name, fmt, ...)	pr_emerg(fmt, ##__VA_ARGS__)
+#define pr_auto_name_disable(name)
+#define pr_auto_name_on(__pr_auto_cond, name, fmt, ...)		pr_emerg(fmt, ##__VA_ARGS__)
+#define pr_auto_on(__pr_auto_cond, lvl, fmt, ...)		pr_emerg(fmt, ##__VA_ARGS__)
+#endif /* CONFIG_SEC_DEBUG_AUTO_COMMENT */
+
+/*
+ * SEC DEBUG EXTRA INFO
+ */
+#if IS_ENABLED(CONFIG_SEC_DEBUG_EXTRA_INFO)
+enum secdbg_exin_fault_type {
+	UNDEF_FAULT,
+	BAD_MODE_FAULT,
+	WATCHDOG_FAULT,
+	KERNEL_FAULT,
+	MEM_ABORT_FAULT,
+	SP_PC_ABORT_FAULT,
+	PAGE_FAULT,
+	ACCESS_USER_FAULT,
+	EXE_USER_FAULT,
+	ACCESS_USER_OUTSIDE_FAULT,
+	BUG_FAULT,
+	SERROR_FAULT,
+	SEABORT_FAULT,
+	PTRAUTH_FAULT,
+	FAULT_MAX,
+};
+
+extern void secdbg_exin_set_finish(void);
+extern void secdbg_exin_set_panic(const char *str);
+extern void secdbg_exin_set_busmon(const char *str);
+extern void secdbg_exin_set_sysmmu(const char *str);
+extern void secdbg_exin_set_smpl(unsigned long count);
+extern void secdbg_exin_set_decon(const char *str);
+extern void secdbg_exin_set_batt(int cap, int volt, int temp, int curr);
+extern void secdbg_exin_set_mfc_error(const char *str);
+extern void secdbg_exin_set_aud(const char *str);
+extern void secdbg_exin_set_gpuinfo(const char *str);
+extern void secdbg_exin_set_epd(const char *str);
+extern void secdbg_exin_set_asv(int bg, int mg, int lg, int g3dg, int mifg);
+extern void secdbg_exin_set_ids(int bids, int mids, int lids, int gids);
+extern void secdbg_exin_set_unfz(const char *comm, int pid);
+extern char *secdbg_exin_get_unfz(void);
+extern void secdbg_exin_set_hardlockup_type(const char *fmt, ...);
+extern void secdbg_exin_set_hardlockup_data(const char *str);
+extern void secdbg_exin_set_hardlockup_freq(const char *domain, struct freq_log *freq);
+extern void secdbg_exin_set_hardlockup_ehld(unsigned int hl_info, unsigned int cpu);
+extern void secdbg_exin_set_ufs(const char *str);
+#else /* !CONFIG_SEC_DEBUG_EXTRA_INFO */
+#define secdbg_exin_set_finish(a)	do { } while (0)
+#define secdbg_exin_set_panic(a)	do { } while (0)
+#define secdbg_exin_set_busmon(a)	do { } while (0)
+#define secdbg_exin_set_sysmmu(a)	do { } while (0)
+#define secdbg_exin_set_smpl(a)		do { } while (0)
+#define secdbg_exin_set_decon(a)	do { } while (0)
+#define secdbg_exin_set_batt(a, b, c, d)	do { } while (0)
+#define secdbg_exin_set_mfc_error(a)	do { } while (0)
+#define secdbg_exin_set_aud(a)		do { } while (0)
+#define secdbg_exin_set_gpuinfo(a)		do { } while (0)
+#define secdbg_exin_set_epd(a)		do { } while (0)
+#define secdbg_exin_set_asv(a, b, c, d, e)	do { } while (0)
+#define secdbg_exin_set_ids(a, b, c, d)		do { } while (0)
+#define secdbg_exin_set_unfz(a, b)	do { } while (0)
+#define secdbg_exin_get_unfz()		("")
+#define secdbg_exin_set_hardlockup_type(a, ...)	do { } while (0)
+#define secdbg_exin_set_hardlockup_data(a)	do { } while (0)
+#define secdbg_exin_set_hardlockup_freq(a, b)	do { } while (0)
+#define secdbg_exin_set_hardlockup_ehld(a, b)	do { } while (0)
+#define secdbg_exin_set_ufs(a)		do { } while (0)
+#endif /* CONFIG_SEC_DEBUG_EXTRA_INFO */
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_WATCHDOGD_FOOTPRINT)
+extern void secdbg_wdd_set_keepalive(void);
+extern void secdbg_wdd_set_start(void);
+extern void secdbg_base_built_wdd_set_emerg_addr(unsigned long addr);
+#else
+#define secdbg_wdd_set_keepalive(a)	do { } while (0)
+#define secdbg_wdd_set_start(a)		do { } while (0)
+#define secdbg_base_built_wdd_set_emerg_addr(a)	do { } while (0)
 #endif
 
-#ifdef CONFIG_SEC_DEBUG_PWDT
-#define SEC_DEBUG_MAX_PWDT_RESTART_CNT 20	//200 seconds
-#define SEC_DEBUG_MAX_PWDT_SYNC_CNT 40	//400 seconds
-#define SEC_DEBUG_MAX_PWDT_INIT_CNT 200	//2000 seconds
-extern void sec_debug_check_pwdt(void);
-extern unsigned int is_verifiedboot_state(void);
+#ifdef CONFIG_SEC_DEBUG_FREQ
+extern void secdbg_freq_check(int type, unsigned long index, unsigned long freq);
 #endif
 
-extern int set_reduced_sdi_mode(void);
-#ifdef CONFIG_SEC_BSP
-extern unsigned int is_boot_recovery(void);
-#endif
-extern unsigned int is_boot_lpm(void);
-extern uint64_t get_pa_dump_sink(void);
-
-#if defined(CONFIG_SEC_FACTORY) &&  (defined(CONFIG_SEC_WINNERLTE_PROJECT) || \
-        defined(CONFIG_SEC_WINNERX_PROJECT))
-extern bool is_pretest(void);
+#ifdef CONFIG_SEC_DEBUG_SYSRQ_KMSG
+extern size_t secdbg_hook_get_curr_init_ptr(void);
+extern size_t dbg_snapshot_get_curr_ptr_for_sysrq(void);
 #endif
 
-#endif	/* SEC_DEBUG_H */
+/* unfrozen task */
+#if IS_ENABLED(CONFIG_SEC_DEBUG_UNFROZEN_TASK)
+void secdbg_base_built_set_unfrozen_task(struct task_struct *task, uint64_t count);
+#else
+static inline void secdbg_base_built_set_unfrozen_task(struct task_struct *task, uint64_t count) {}
+#endif /* CONFIG_SEC_DEBUG_UNFROZEN_TASK */
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_BAD_STACK_INFO)
+extern void secdbg_base_built_bad_stack_info(unsigned long tsk_stk, unsigned long irq_stk, unsigned long ovf_stk);
+#else
+static inline void secdbg_base_built_bad_stack_info(unsigned long tsk_stk, unsigned long irq_stk, unsigned long ovf_stk) {}
+#endif 
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_DTASK)
+static inline void secdbg_dtsk_built_set_data(long type, void *data)
+{
+	current->android_oem_data1[0] = (u64)type;
+	current->android_oem_data1[1] = (u64)data;
+}
+static inline void secdbg_dtsk_built_clear_data(void)
+{
+	secdbg_dtsk_built_set_data(DTYPE_NONE, NULL);
+}
+#else
+#define secdbg_dtsk_built_set_data(a, b)	do { } while (0)
+#define secdbg_dtsk_built_clear_data()		do { } while (0)
+#endif /* CONFIG_SEC_DEBUG_DTASK */
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_PM_DEVICE_INFO)
+extern void secdbg_base_built_set_device_shutdown_timeinfo(uint64_t start, uint64_t end, uint64_t duration, uint64_t func);
+extern void secdbg_base_built_clr_device_shutdown_timeinfo(void);
+extern void secdbg_base_built_set_shutdown_device(const char *fname, const char *dname);
+extern void secdbg_base_built_set_suspend_device(const char *fname, const char *dname);
+#else
+#define secdbg_base_built_set_device_shutdown_timeinfo(a, b, c, d)	do { } while (0)
+#define secdbg_base_built_clr_device_shutdown_timeinfo()	do { } while (0)
+#define secdbg_base_built_set_shutdown_device(a, b)		do { } while (0)
+#define secdbg_base_built_set_suspend_device(a, b)		do { } while (0)
+#endif /* CONFIG_SEC_DEBUG_PM_DEVICE_INFO */
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_TASK_IN_STATE_INFO)
+void secdbg_base_built_set_task_in_pm_suspend(struct task_struct *task);
+void secdbg_base_built_set_task_in_sync_irq(struct task_struct *task, unsigned int irq, struct irq_desc *desc);
+#else
+#define secdbg_base_built_set_task_in_pm_suspend(a)		do { } while (0)
+#define secdbg_base_built_set_task_in_sync_irq(a, b, c)		do { } while (0)
+#endif /* CONFIG_SEC_DEBUG_TASK_IN_STATE_INFO */
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_SOFTDOG)
+void secdbg_softdog_show_info(void);
+#else
+#define secdbg_softdog_show_info()		do { } while (0)
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_DEBUG_HANDLE_BAD_STACK)
+extern void secdbg_base_built_check_handle_bad_stack(void);
+#else
+static inline void secdbg_base_built_check_handle_bad_stack(void) { }
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_MEMTAB
+#define SDBG_KNAME_LEN	64
+
+struct secdbg_member_type {
+	char member[SDBG_KNAME_LEN];
+	uint16_t size;
+	uint16_t offset;
+	uint16_t unused[2];
+};
+
+#define SECDBG_DEFINE_MEMBER_TYPE(key, st, mem)			\
+	const struct secdbg_member_type sdbg_##key		\
+		__section(".secdbg_mbtab." #key) = {		\
+		.member = #key,					\
+		.size = sizeof_field(struct st, mem),		\
+		.offset = offsetof(struct st, mem),		\
+	}
+#else
+#define SECDBG_DEFINE_MEMBER_TYPE(a, b, c)
+#endif /* CONFIG_SEC_DEBUG_MEMTAB */
+
+extern struct atomic_notifier_head sec_power_off_notifier_list;
+
+extern void secdbg_exin_set_main_ocp(void *main_ocp_cnt, void *main_oi_cnt, int buck_cnt);
+
+#endif /* SEC_DEBUG_H */
+
