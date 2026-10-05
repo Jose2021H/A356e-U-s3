@@ -1164,7 +1164,7 @@ VARIANTINCLUDE := \
                 $(if $(building_out_of_srctree),-I$(srctree)/include/variant1) \
                 -I$(objtree)/include/variant1
 # endif
-LINUXINCLUDE := $(VARIANTINCLUDE) $(LINUXINCLUDE)
+LINUXINCLUDE += $(VARIANTINCLUDE)
 
 # Default kernel image to build when no specific target is given.
 # KBUILD_IMAGE may be overruled on the command line or
